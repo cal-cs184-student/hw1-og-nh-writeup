@@ -9,7 +9,7 @@
 
             .container {
                 margin: 0 auto;
-                padding: 60px 20%;
+                padding: 40px 8%;
             }
 
             figure {
@@ -26,7 +26,7 @@
 
             table img {
                 width: 100%;
-                max-width: 400px;
+                max-width: 600px;
             }
 
             td {
@@ -51,25 +51,32 @@
         <!-- ============================ OVERVIEW ============================ -->
         <h2>Overview</h2>
         <p>
-            I built a 2D rasterizer that turns SVG scenes into pixels. It starts with the most basic question, whether a
+            We built a 2D rasterizer that turns SVG scenes into pixels. It starts with the most basic question, whether a
             sample point is inside a triangle, and builds up to supersampled antialiasing, hierarchical transforms,
             barycentric interpolation of vertex colors, and texture mapping with both pixel sampling (nearest and bilinear)
             and level sampling (mipmaps).
         </p>
         <p>
-            The biggest thing I learned is that almost every visual artifact here is a sampling problem. Jagged edges,
+            The biggest thing we learned is that almost every visual artifact here is a sampling problem. Jagged edges,
             broken skinny triangles, blocky magnified textures, and moiré in minified textures all come from sampling a
             continuous signal too sparsely or without filtering it first. Each technique in this homework trades speed or
-            memory for a better approximation of the ideal filtered signal. I also found that barycentric coordinates are
+            memory for a better approximation of the ideal filtered signal. We also found that barycentric coordinates are
             the backbone of the whole pipeline: the same area ratios give the inside test, color interpolation, uv
             interpolation, and the uv derivatives used to pick mipmap levels.
         </p>
 
+        <h2>Problems Encountered</h2>
+        <ul>
+            <li><b>Build setup:</b> CMake couldn't find FreeType on Windows. We installed it with vcpkg and pointed CMake at the vcpkg toolchain file.</li>
+            <li><b>Supersampling regression:</b> After adding Task 2, edges stayed jagged. The old Task 1 loop was still calling <code>fill_pixel</code> (painting whole pixels), and the old resolve loop was overwriting the averaged result using one-sample-per-pixel indexing. Removing both fixed it.</li>
+            <li><b>Infinite recursion:</b> An early version of <code>fill_pixel</code> accidentally called itself; restoring the direct sample-buffer write fixed the crash.</li>
+        </ul>
+
         <!-- ============================ TASK 1 ============================ -->
         <h2>Task 1: Drawing Single-Color Triangles</h2>
-        <p><b>How I rasterize triangles.</b>
-            For each triangle I compute its axis-aligned bounding box from the min and max of the three vertex
-            coordinates, clamped to the screen. I loop over every pixel in that box and test one sample at the pixel
+        <p><b>How we rasterize triangles.</b>
+            For each triangle we compute its axis-aligned bounding box from the min and max of the three vertex
+            coordinates, clamped to the screen. We loop over every pixel in that box and test one sample at the pixel
             center, \( (x + 0.5,\ y + 0.5) \).
         </p>
         <p>
@@ -78,7 +85,7 @@
         \[ E(a, b, p) = (b_x - a_x)(p_y - a_y) - (b_y - a_y)(p_x - a_x) \]
         <p>
             is positive on one side of the line and negative on the other. A sample is inside the triangle when all three
-            edge values have the same sign. I accept both "all \( \ge 0 \)" and "all \( \le 0 \)", so the rasterizer works
+            edge values have the same sign. We accept both "all \( \ge 0 \)" and "all \( \le 0 \)", so the rasterizer works
             for both clockwise and counter-clockwise vertex orders (test6). Using \( \ge \) rather than \( > \) means samples
             exactly on an edge are drawn, so no edges are left un-rasterized. Covered pixels are written with
             <code>fill_pixel</code>.
@@ -90,14 +97,14 @@
         </p>
 
         <figure>
-            <img src="assets/task1_test4.png" alt="test4.svg at 1 sample per pixel" style="width:70%"/>
+            <img src="assets/task1_test4.png" alt="test4.svg at 1 sample per pixel" style="width:90%"/>
             <figcaption>basic/test4.svg at default view, 1 sample per pixel. The pixel inspector shows a skinny triangle tip breaking into disconnected pixels, because pixel centers miss the thin part of the triangle.</figcaption>
         </figure>
 
         <!-- ============================ TASK 2 ============================ -->
         <h2>Task 2: Antialiasing by Supersampling</h2>
         <p><b>Algorithm and data structures.</b>
-            Instead of one sample per pixel, I take an \( n \times n \) grid of samples inside each pixel, where
+            Instead of one sample per pixel, we take an \( n \times n \) grid of samples inside each pixel, where
             \( n = \sqrt{\text{sample_rate}} \). Sample \( (i, j) \) in pixel \( (x, y) \) sits at
         </p>
         \[ \left( x + \frac{i + 0.5}{n},\ \ y + \frac{j + 0.5}{n} \right) \]
@@ -121,24 +128,18 @@
             pixel grid's Nyquist limit. Edge pixels become in-between blends instead of hard on/off values.
         </p>
 
-        <div style="display: flex; flex-direction: column; align-items: center;">
-            <table style="width: 100%; text-align: center; border-collapse: collapse;">
-              <tr>
-                <td style="text-align: center;">
-                  <img src="assets/tast2_pic1.png"/>
-                  <figcaption>Sample rate 1</figcaption>
-                </td>
-                <td style="text-align: center;">
-                  <img src="assets/task2_pic2.png"/>
-                  <figcaption>Sample rate 4</figcaption>
-                </td>
-                <td style="text-align: center;">
-                  <img src="assets/task2_pic3.png"/>
-                  <figcaption>Sample rate 16</figcaption>
-                </td>
-              </tr>
-            </table>
-        </div>
+        <figure>
+            <img src="assets/tast2_pic1.png" alt="test4 at sample rate 1" style="width:90%"/>
+            <figcaption>Sample rate 1</figcaption>
+        </figure>
+        <figure>
+            <img src="assets/task2_pic2.png" alt="test4 at sample rate 4" style="width:90%"/>
+            <figcaption>Sample rate 4</figcaption>
+        </figure>
+        <figure>
+            <img src="assets/task2_pic3.png" alt="test4 at sample rate 16" style="width:90%"/>
+            <figcaption>Sample rate 16</figcaption>
+        </figure>
         <p>
             At rate 1 the skinny triangle tip breaks apart into isolated pixels, since most pixel centers fall outside the
             sliver. At rate 4 more sub-samples land inside, so the tip becomes continuous but with coarse shades. At rate 16
@@ -149,7 +150,7 @@
         <!-- ============================ TASK 3 ============================ -->
         <h2>Task 3: Transforms</h2>
         <p>
-            I implemented <code>translate</code>, <code>scale</code>, and <code>rotate</code> as 3×3 matrices in homogeneous
+            We implemented <code>translate</code>, <code>scale</code>, and <code>rotate</code> as 3×3 matrices in homogeneous
             coordinates. A 2D point becomes \( (x, y, 1) \), which lets translation (not linear in 2D) be written as a
             matrix multiply, so any chain of transforms collapses into a single matrix:
         </p>
@@ -172,13 +173,13 @@
                 </td>
                 <td style="text-align: center;">
                   <img src="assets/task3_robot_edit.png"/>
-                  <figcaption>My version, <a href="assets/my_robot.svg">my_robot.svg</a>. Cubeman crossing his arms over his head.</figcaption>
+                  <figcaption>Our version, <a href="assets/my_robot.svg">my_robot.svg</a>. Cubeman crossing his arms over his head.</figcaption>
                 </td>
               </tr>
             </table>
         </div>
         <p>
-            I wanted cubeman to cross his arms over his head in an "X" pose. Each arm is rotated upward about its shoulder so the forearms cross above his head. To rotate a limb around its joint instead of the origin, I wrapped it in
+            We wanted cubeman to cross his arms over his head in an "X" pose. Each arm is rotated upward about its shoulder so the forearms cross above his head. To rotate a limb around its joint instead of the origin, we wrapped it in
             <code>translate(jx, jy) rotate(θ) translate(−jx, −jy)</code>, which moves the joint to the origin, rotates, and
             moves it back. Nested <code>&lt;g&gt;</code> groups apply transforms hierarchically, so rotating an upper arm also
             carries the rest of the arm with it.
@@ -193,7 +194,7 @@
             to 0 along the opposite edge. All three are non-negative exactly when the point is inside the triangle.
         </p>
         <p>
-            I reuse the edge function, since it equals twice a signed area:
+            We reuse the edge function, since it equals twice a signed area:
         </p>
         \[ \alpha = \frac{E(B, C, p)}{E(A, B, C)}, \qquad \beta = \frac{E(C, A, p)}{E(A, B, C)}, \qquad \gamma = 1 - \alpha - \beta \]
         <p>
@@ -220,8 +221,8 @@
         <h2>Task 5: "Pixel sampling" for texture mapping</h2>
         <p>
             Texture mapping asks: for this screen sample, what color is the texture at the matching location? For each
-            supersample inside a textured triangle, I compute its barycentric coordinates and interpolate the vertices'
-            \( (u, v) \) coordinates the same way as colors. Since \( (u, v) \in [0, 1]^2 \), I scale by the texture's width and
+            supersample inside a textured triangle, we compute its barycentric coordinates and interpolate the vertices'
+            \( (u, v) \) coordinates the same way as colors. Since \( (u, v) \in [0, 1]^2 \), we scale by the texture's width and
             height to get a continuous texel position. Pixel sampling is the choice of how to turn that continuous position
             into a color from the discrete texel grid.
         </p>
@@ -281,11 +282,11 @@
         </p>
         <p><b>Implementation.</b></p>
         <ul>
-            <li>In <code>rasterize_textured_triangle</code>, for each sample I compute the uv at \( (x, y) \), \( (x+1, y) \), and \( (x, y+1) \) with barycentrics (extrapolating if the neighbors fall outside the triangle) and store them as <code>p_uv</code>, <code>p_dx_uv</code>, and <code>p_dy_uv</code>.</li>
+            <li>In <code>rasterize_textured_triangle</code>, for each sample we compute the uv at \( (x, y) \), \( (x+1, y) \), and \( (x, y+1) \) with barycentrics (extrapolating if the neighbors fall outside the triangle) and store them as <code>p_uv</code>, <code>p_dx_uv</code>, and <code>p_dy_uv</code>.</li>
             <li><code>get_level</code> takes the differences to get \( (du/dx, dv/dx) \) and \( (du/dy, dv/dy) \), scales them by the full-resolution width and height so they're in texel units, and computes the level below. If \( L \le 1 \) the texture is magnified, so it returns level 0.</li>
             <li><code>sample</code> uses level 0 for <code>L_ZERO</code>, \( \text{round}(D) \) for <code>L_NEAREST</code>, and for <code>L_LINEAR</code> it samples \( \lfloor D \rfloor \) and the next level and blends them by the fractional part of \(D\). Within each level, <code>psm</code> still picks nearest or bilinear, so all six combinations work. <code>L_LINEAR</code> + <code>P_LINEAR</code> is trilinear filtering.</li>
         </ul>
-        \[ L = \max\left( \left\| \left(\tfrac{du}{dx}, \tfrac{dv}{dx}\right) \right\|,\ \left\| \left(\tfrac{du}{dy}, \tfrac{dv}{dy}\right) \right\| \right), \qquad D = \text{clamp}(\log_2 L,\ 0,\ \text{max level}) \]
+        \[ L = \max\left( \left\| \left(\frac{du}{dx}, \frac{dv}{dx}\right) \right\|,\ \left\| \left(\frac{du}{dy}, \frac{dv}{dy}\right) \right\| \right), \qquad D = \text{clamp}(\log_2 L,\ 0,\ \text{max level}) \]
 
         <p><b>Tradeoffs.</b></p>
         <ul>
@@ -294,8 +295,8 @@
             <li><b>Level sampling (mipmaps)</b> is nearly constant cost per lookup (<code>L_LINEAR</code> doubles the lookups), plus a small cost to compute the derivatives. The pyramid adds about ⅓ extra texture memory. It fixes minification aliasing cheaply, but can over-blur at steep angles because the footprint is treated as square.</li>
         </ul>
 
-        <p><b>Results on my own image.</b>
-            I used a view of the Berkeley skyline at sunset, looking past the Campanile toward the Bay Bridge and San Francisco. It has lots of fine, high-contrast detail (thin towers, bridge lights, city lights) against a smooth sky, which makes aliasing easy to spot. The pixel inspector is centered on the thin radio tower on the skyline.
+        <p><b>Results on our own image.</b>
+            We used a view of the Berkeley skyline at sunset, looking past the Campanile toward the Bay Bridge and San Francisco. It has lots of fine, high-contrast detail (thin towers, bridge lights, city lights) against a smooth sky, which makes aliasing easy to spot. The pixel inspector is centered on the thin radio tower on the skyline.
         </p>
         <div style="display: flex; flex-direction: column; align-items: center;">
             <table style="width: 100%; text-align: center; border-collapse: collapse;">
@@ -336,18 +337,18 @@
         <!-- ============================ EXTRA CREDIT ============================ -->
         <h2>(Optional) Task 7: Extra Credit - Draw Something Creative!</h2>
         <figure>
-            <img src="assets/competition.png" alt="A cartoon bear in an orange beanie chopping down a pine tree" style="width:70%"/>
+            <img src="assets/competition.png" alt="A cartoon bear in an orange beanie chopping down a pine tree" style="width:90%"/>
             <figcaption><a href="assets/competition.svg">competition.svg</a>, 800×800, rendered at 16 samples per pixel.</figcaption>
         </figure>
         <p>
-            A lumberjack bear in an orange beanie, mid-swing, chopping down a big pine tree with wood chips flying. I
+            A lumberjack bear in an orange beanie, mid-swing, chopping down a big pine tree with wood chips flying. We
             generated the SVG procedurally with <code>src/gen_bear_scene.py</code>, which writes about 380 convex polygons
             (no <code>&lt;path&gt;</code> elements), so the rasterizer never has to triangulate anything tricky.
         </p>
         <ul>
             <li><b>Background:</b> a sky gradient made from thin rects with linearly interpolated colors, a sun and clouds built from overlapping many-sided polygons, a sine-wave hill silhouette, a randomized background forest of small pines, and striped grass.</li>
             <li><b>Bear:</b> the body, belly, head, ears, snout, eyes, and paws are ellipses approximated as polygons. The arms and axe handle are thick bars computed from two endpoints and a normal vector.</li>
-            <li><b>Tree:</b> modeled in local coordinates around its base, then rotated 8° and translated into place (the same math as my Task 3 transforms), so it leans after the chop. The cut notch shows pale wood, and randomized chips fly out of it.</li>
+            <li><b>Tree:</b> modeled in local coordinates around its base, then rotated 8° and translated into place (the same math as our Task 3 transforms), so it leans after the chop. The cut notch shows pale wood, and randomized chips fly out of it.</li>
             <li><b>Motion:</b> white swing arcs behind the axe, drawn as short segments along a circle around the bear's shoulder.</li>
             <li>Rendering at 16 samples per pixel keeps the thin swing arcs, axe handle, and chips smooth instead of broken.</li>
         </ul>
